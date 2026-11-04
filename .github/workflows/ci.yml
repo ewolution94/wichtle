@@ -1,0 +1,99 @@
+name: CI
+
+# Runs on pull requests, and is the gate docker-publish.yml calls before it publishes
+# anything, so the checks guarding a PR and the checks guarding a deploy can't drift apart.
+# The end-to-end tests (tests/e2e, every workflow in a real browser) and the simulations
+# (tests/*.sim.mjs) run locally before a push.
+on:
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: Typecheck, test, build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # Matches the Dockerfile.
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # The built page served by the real production server: a group made, a name claimed, the
+      # draw made and opened, the host's page sealed until the code unseals it.
+      - name: Smoke test the production server
+        run: |
+          base=http://127.0.0.1:7799
+          export WICHTLE_DATA=$(mktemp -d)
+          PORT=7799 node server/server.mjs &
+          server=$!
+          for _ in $(seq 1 20); do curl -sf $base/healthz && break; sleep 0.5; done
+          curl -sf $base/ | grep -q '<title>Wichtle</title>'
+          node --input-type=module -e "
+            const post = (p, b = {}, h = {}) => fetch('$base/api' + p, { method: 'POST', headers: { 'content-type': 'application/json', ...h }, body: JSON.stringify(b) });
+            const get = (p, h = {}) => fetch('$base/api' + p, { headers: h });
+            const party = new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10);
+            const made = await (await post('/groups', { name: 'Smoke <test>', party, lang: 'en', host: { name: 'Ann', joins: true }, names: ['Ben', 'Cem'], code: 'smoketest' })).json();
+            const page = await (await fetch('$base/g/' + made.group)).text();
+            if (!page.includes('<title>Smoke &lt;test&gt; · Wichtle</title>') || !page.includes('noindex')) throw new Error('group page');
+            if (page.includes('Ben') || page.includes(made.host) || page.includes(made.me)) throw new Error('the page carries more than the name');
+            if ((await fetch('$base/h/' + made.group)).status !== 404) throw new Error('group key on the host path');
+            const group = await (await get('/g/' + made.group)).json();
+            const ben = group.people.find((p) => p.name === 'Ben');
+            const claimed = await (await post('/g/' + made.group + '/claim', { id: ben.id })).json();
+            if ((await post('/g/' + made.group + '/claim', { id: ben.id })).status !== 409) throw new Error('claimed twice');
+            if ((await post('/h/' + made.host + '/draw')).status !== 200) throw new Error('draw');
+            const { recipient } = await (await post('/p/' + claimed.me + '/reveal')).json();
+            if (!recipient?.name || recipient.name === 'Ben') throw new Error('reveal');
+            const sealed = await (await get('/h/' + made.host)).text();
+            if (sealed.includes('pairs') || JSON.parse(sealed).unsealed !== null) throw new Error('the host page shows the draw');
+            if ((await post('/h/' + made.host + '/unseal', { code: 'wrong' })).status !== 403) throw new Error('wrong code');
+            const { token } = await (await post('/h/' + made.host + '/unseal', { code: 'smoketest' })).json();
+            const open = await (await get('/h/' + made.host, { 'x-unseal': token })).json();
+            if (open.unsealed?.pairs.length !== 3) throw new Error('unseal');
+            console.log('group ok');
+          "
+          test "$(curl -s -o /dev/null -w '%{http_code}' $base/g/AAAAAAAAAAAAAAAAAAAAAA)" = 404
+          curl -s $base/g/AAAAAAAAAAAAAAAAAAAAAA | grep -q '<div id="app">'
+          test "$(curl -s -o /dev/null -w '%{http_code}' $base/new)" = 200
+          curl -sI $base/ | grep -qi "content-security-policy: default-src 'self'"
+          curl -sI $base/ | grep -i "content-security-policy" | grep -q "connect-src 'self';"
+          curl -sI $base/ | grep -qi "cache-control: no-cache"
+          curl -sI $base/g/AAAAAAAAAAAAAAAAAAAAAA | grep -qi "x-robots-tag: noindex"
+          curl -sf $base/robots.txt | grep -q 'Disallow: /g/'
+          curl -sf $base/manifest.webmanifest | grep -q '"name": "Wichtle"'
+          curl -sf -o /dev/null $base/sw.js
+          curl -sf -o /dev/null $base/og.png
+          curl -sf -o /dev/null $base/icons/apple-touch-icon.png
+          asset=$(curl -s $base/ | grep -o '/assets/[^"]*\.js' | head -1)
+          curl -sI "$base$asset" | grep -qi 'cache-control: public, max-age=31536000, immutable'
+          test "$(curl -s -o /dev/null -w '%{http_code}' $base/assets/missing.js)" = 404
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST $base/)" = 405
+          # The Census forwarder is wired in; without WICHTLE_CENSUS it answers locally.
+          test "$(curl -s -o /dev/null -w '%{http_code}' $base/_e.js)" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST --data '{}' $base/_e)" = 204
+          kill $server
+          wait $server || true

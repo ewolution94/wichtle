@@ -1,0 +1,54 @@
+# The Wichtle stack Portainer runs on the NAS.
+#
+# This is deliberately NOT the repo's docker-compose.yml. That one carries `build: .`,
+# which would make Portainer compile the app on the NAS instead of pulling the image
+# CI already published. Paste this into Portainer's stack editor (or point a
+# Git-backed stack at this file), never that one.
+#
+# Auto-updates come from the shared Watchtower stack (development/.claude/skills/portainer/watchtower/),
+# which only touches containers carrying the label below. With it, a push to `release`
+# is the entire deploy.
+
+services:
+  wichtle:
+    image: ghcr.io/ewolution94/wichtle:latest
+    container_name: wichtle
+    restart: unless-stopped
+    healthcheck:
+      # Every ~14 minutes, each container on its own interval so they never line up (plans/nas-load.md).
+      interval: 845s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    ports:
+      # The port from the registry (development/.claude/skills/portainer/ports.json).
+      - "7700:7700"
+    environment:
+      - PORT=7700
+      - TZ=Europe/Berlin
+      # Visit counts: /_e and /_e.js are forwarded to Census over the `ewolution` network, with
+      # every group's key cut out of the path. Remove the line to stop counting.
+      - WICHTLE_CENSUS=http://census:4901
+      # The language and theme a device that hasn't picked starts from: the family's, set in
+      # Dashboard (dashboard:8081 on the `ewolution` network, never published). Off or down: German
+      # and the device's theme.
+      - DASHBOARD_URL=http://dashboard:8081
+    volumes:
+      # The groups (one SQLite file): names, wishes, addresses and draws, each deleted 30 days
+      # after its party. Keep the volume: running groups live in it.
+      - wichtle-data:/data
+    networks:
+      # The shared network Census listens on. It must exist before this stack is created
+      # (Portainer → Networks → `ewolution`).
+      - ewolution
+    labels:
+      # The opt-in the shared Watchtower looks for (it runs with
+      # WATCHTOWER_LABEL_ENABLE=true, so unlabelled containers are never touched).
+      - "com.centurylinklabs.watchtower.enable=true"
+
+volumes:
+  wichtle-data:
+
+networks:
+  ewolution:
+    external: true

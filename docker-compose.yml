@@ -1,0 +1,11 @@
+# For trying the image locally (it builds from source). The NAS runs deploy/portainer-stack.yml.
+services:
+  wichtle:
+    build: .
+    image: ghcr.io/ewolution94/wichtle:latest
+    container_name: wichtle
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data

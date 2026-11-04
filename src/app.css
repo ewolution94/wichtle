@@ -1,0 +1,299 @@
+/* Wichtle, look B: Scherenschnitt in Gingerbread (plans/wichtle/looks.html and palettes.html, the user's
+   picks, 2026-11-04). A paper-cut village: a house per person (a household one wider house) whose
+   windows light once they've joined; the reveal is the Advent door of the party's date; the live draw
+   a candle arch, one candle per person. Brown paper on vanilla by day, dark chocolate by night, red
+   sugar as the accent (candle gold at night). Grenze Gotisch for headings, Alegreya Sans for the rest.
+
+   Every colour is one --m-* property as a light-dark() pair; Folio's tokens follow from them, so the
+   shared elements (field, button, segmented, switch, table, sheet, toast) wear the look too. */
+
+@import '../vendor/ewo/tokens/index.css';
+@import '../vendor/ewo/tokens/base.css';
+@import '@fontsource-variable/grenze-gotisch/wght.css';
+@import '@fontsource/alegreya-sans/400.css';
+@import '@fontsource/alegreya-sans/500.css';
+@import '@fontsource/alegreya-sans/700.css';
+@import '@fontsource/alegreya-sans/400-italic.css';
+
+:root {
+  color-scheme: light dark;
+  --m-r: 10px;
+  --m-body: 'Alegreya Sans', 'Gill Sans', 'Gill Sans MT', Calibri, sans-serif;
+  --m-disp: 'Grenze Gotisch Variable', 'Grenze Gotisch', 'Old English Text MT', Georgia, serif;
+
+  --m-bg: light-dark(#f7efe3, #1c120b);
+  --m-card: light-dark(#fffaf2, #281a10);
+  --m-raised: light-dark(#fffdf8, #2f2014);
+  --m-sunk: light-dark(#efe3d1, #22160e);
+  --m-ink: light-dark(#3a2212, #f6ebdd);
+  --m-ink-2: light-dark(#604431, #d6bfa6);
+  --m-ink-3: light-dark(#765a46, #b39c84);
+  --m-line: light-dark(rgb(58 34 18 / 0.14), rgb(246 235 221 / 0.12));
+  --m-accent: light-dark(#ad2329, #ffb84d);
+  --m-accent-ink: light-dark(#ffffff, #1c1405);
+  --m-cut: light-dark(#86491f, #110904);
+  --m-cut-2: light-dark(#c9966a, #3d2513);
+  --m-cut-3: light-dark(#dac5a8, #603b1f);
+  --m-glow: light-dark(#f2b13a, #ffc65c);
+  --m-glow-sh: light-dark(rgb(242 177 58 / 0.32), rgb(255 198 92 / 0.6));
+  --m-win: light-dark(#fff7ea, #36220f);
+  --m-paper-ink: light-dark(#fff7ea, #f3e3cf);
+  --m-sky-1: light-dark(#fbf5ec, #1a0f08);
+  --m-sky-2: light-dark(#f1e1c9, #6c4b2d);
+  --m-star: light-dark(#ad2329, #ffc65c);
+  --m-door: light-dark(#fffaf1, #f6e9d6);
+  --m-door-ink: light-dark(#ad2329, #ad2329);
+  --m-door-ring: light-dark(#ad2329, #ffb84d);
+  --m-invert: light-dark(#5e3417, #ffc65c);
+  --m-invert-ink: light-dark(#fff7ea, #1c1405);
+  --m-stage: light-dark(#f4e8d6, #150d07);
+  --m-warn: light-dark(#9a5a00, #ffb545);
+
+  --ewo-sans: var(--m-body);
+  --ewo-bg: var(--m-card);
+  --ewo-bg-raised: var(--m-raised);
+  --ewo-bg-sunk: var(--m-sunk);
+  --ewo-fg: var(--m-ink);
+  --ewo-fg-2: var(--m-ink-2);
+  --ewo-fg-3: var(--m-ink-3);
+  --ewo-line: var(--m-line);
+  --ewo-line-strong: color-mix(in srgb, var(--m-ink) 26%, transparent);
+  --ewo-fill: color-mix(in srgb, var(--m-ink) 4%, transparent);
+  --ewo-fill-2: color-mix(in srgb, var(--m-ink) 7%, transparent);
+  --ewo-fill-3: color-mix(in srgb, var(--m-ink) 11%, transparent);
+  --ewo-invert: var(--m-invert);
+  --ewo-invert-ink: var(--m-invert-ink);
+  --ewo-accent: var(--m-accent);
+  --ewo-accent-ink: var(--m-accent-ink);
+  --ewo-focus: 2px solid var(--m-accent);
+  --ewo-table-bg: var(--m-card);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: var(--m-bg);
+}
+
+body {
+  color: var(--m-ink);
+  font-family: var(--m-body);
+  font-size: 15px;
+  line-height: 1.5;
+  min-height: 100dvh;
+}
+
+/* No double-tap zoom on anything tappable (learnings/ios-and-webkit.md). */
+:where(button, a, label, summary, input, select, textarea, [role='button'], [role='radio']) {
+  touch-action: manipulation;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 600;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.disp {
+  font-family: var(--m-disp);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+a {
+  color: inherit;
+}
+
+:where(.plain) {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+.vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.lbl {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--m-ink-2);
+}
+
+.hint {
+  font-size: 13.5px;
+  color: var(--m-ink-3);
+  line-height: 1.45;
+}
+
+.sp {
+  flex: 1;
+}
+
+ewo-field,
+ewo-segmented[stretch] {
+  width: 100%;
+}
+
+.card {
+  background: var(--m-card);
+  border: 1px solid var(--m-line);
+  border-radius: var(--m-r);
+  padding: 18px 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-content: start;
+}
+
+.card h3 {
+  font-family: var(--m-disp);
+  font-weight: 700;
+  font-size: 23px;
+  letter-spacing: 0.01em;
+}
+
+.dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 5px 14px;
+  margin: 0;
+  font-size: 14.5px;
+}
+
+.dl dt {
+  color: var(--m-ink-3);
+}
+
+.dl dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.linkrow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.linkrow code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--ewo-mono);
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--m-sunk);
+  color: var(--m-ink-2);
+}
+
+.banner {
+  padding: 10px 14px;
+  border-radius: var(--m-r);
+  background: color-mix(in oklab, var(--m-accent) 11%, var(--m-card));
+  border: 1px solid color-mix(in oklab, var(--m-accent) 35%, transparent);
+  font-size: 14.5px;
+  font-weight: 500;
+}
+
+.banner.warn {
+  background: color-mix(in oklab, var(--m-warn) 10%, var(--m-card));
+  border-color: color-mix(in oklab, var(--m-warn) 40%, transparent);
+}
+
+.practice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 8px 14px;
+  border-radius: var(--m-r);
+  font-size: 14px;
+  background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--m-glow) 16%, var(--m-card)) 0 10px, var(--m-card) 10px 20px);
+  border: 1px dashed color-mix(in oklab, var(--m-cut) 50%, transparent);
+}
+
+.practice b {
+  font-weight: 700;
+}
+
+/* The "Wichtle" wordmark with its paper star. */
+.wm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--m-ink);
+  font: 700 30px/1 var(--m-disp);
+  text-decoration: none;
+}
+
+.wm svg {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+
+.wm svg .c1 {
+  fill: var(--m-star);
+}
+
+/* A window as a status mark (the table's ticks). */
+.mk {
+  display: inline-block;
+  vertical-align: middle;
+  width: 13px;
+  height: 16px;
+  border-radius: 7px 7px 0 0;
+  background: var(--m-sunk);
+  box-shadow: 0 0 0 2px var(--m-cut);
+}
+
+.mk.on {
+  background: var(--m-glow);
+  box-shadow:
+    0 0 0 2px var(--m-cut),
+    0 0 10px 2px var(--m-glow-sh);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

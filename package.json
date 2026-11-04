@@ -1,0 +1,31 @@
+{
+  "name": "wichtle",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Wichtle: Wichteln (Secret Santa) for a group, run by its host. One link to join, a sealed draw, deleted 30 days after the party.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "start": "node server/server.mjs",
+    "check": "svelte-check --tsconfig ./tsconfig.json --threshold error",
+    "test": "node --test tests/*.test.mjs",
+    "test:sim": "node --test tests/*.sim.mjs",
+    "test:e2e": "node tests/e2e/run.mjs"
+  },
+  "devDependencies": {
+    "@fontsource-variable/grenze-gotisch": "^5.3.0",
+    "@fontsource/alegreya-sans": "^5.3.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@tsconfig/svelte": "^5.0.8",
+    "playwright": "~1.63.0",
+    "svelte": "^5.57.1",
+    "svelte-check": "^4.7.6",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.2"
+  }
+}
