@@ -1162,12 +1162,15 @@
 
   .tool {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
     justify-items: start;
   }
 
+  /* Buttons keep their own width; a form or the link row takes the sheet's, so a long link ends in "…". */
   .tool > form,
-  .tool > .row {
+  .tool > .row,
+  .tool > .linkrow {
     justify-self: stretch;
   }
 
