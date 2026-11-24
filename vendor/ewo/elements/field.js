@@ -5,6 +5,8 @@ var r = t`
     --_h: 38px;
     --_font: var(--ewo-text-md);
     display: grid;
+    /* Stretched by its grid or flex row (a neighbour with a hint), the field keeps its label and box together. */
+    align-content: start;
     gap: 6px;
     min-width: 0;
     color: var(--ewo-fg);
