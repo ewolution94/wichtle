@@ -108,17 +108,32 @@
 </div>
 
 <style>
+  /* The scene runs to the frame's edge. A border would sit outside the sky's box, and the gradient
+     repeats into it (a bright line along the top, brown beside the dark ground); the line is drawn
+     over the scene instead (::after). The ground's colour under the last strip keeps the sky from
+     showing through the rounded corners' soft edge. */
   .vil {
     position: relative;
     border-radius: var(--m-r);
     overflow: hidden;
-    background: linear-gradient(var(--m-sky-1), var(--m-sky-2));
-    border: 1px solid var(--m-line);
+    background:
+      linear-gradient(var(--m-sky-1), var(--m-sky-2)) top / 100% calc(100% - 14px) no-repeat,
+      var(--m-cut);
     padding-top: 56px;
     min-height: 262px;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
+  }
+
+  .vil::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px var(--m-line);
+    pointer-events: none;
   }
 
   .vil.compact {
