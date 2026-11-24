@@ -12,6 +12,7 @@
   import Gone from './Gone.svelte';
   import Practice from './Practice.svelte';
   import WishList from './WishList.svelte';
+  import RoleTabs from './RoleTabs.svelte';
   import { ApiError, post, type PersonView, type Recipient, type Wish } from '../lib/api.ts';
   import { Loader } from '../lib/loader.svelte.ts';
   import { byGroup, byKey, forget, remember } from '../lib/known.svelte.ts';
@@ -32,8 +33,12 @@
   let revealing = $state(false);
   let ready = $state(false);
   let posted = $state(false);
-  let saved = $state('');
-  let savedTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // What changed is saved at once; each section says so beside its own heading ("Saving…", then
+  // "Saved" for a few seconds), right where the change was made.
+  type Part = 'handover' | 'wishes' | 'not';
+  let status = $state<Record<Part, '' | 'saving' | 'saved'>>({ handover: '', wishes: '', not: '' });
+  const timers: Partial<Record<Part, ReturnType<typeof setTimeout>>> = {};
 
   // This device remembers the group (the home's list), and forgets it once the link stops working.
   // Someone else's page opened here (the host looking as a practice colleague) doesn't replace this
@@ -93,17 +98,36 @@
     }
   });
 
-  async function save(body: Record<string, unknown>) {
+  async function save(part: Part, body: Record<string, unknown>) {
+    clearTimeout(timers[part]);
+    status[part] = 'saving';
     try {
       await post(`/p/${key}/me`, body);
-      saved = t('me.saved');
-      clearTimeout(savedTimer);
-      savedTimer = setTimeout(() => (saved = ''), 1800);
-      void data.load();
+      status[part] = 'saved';
+      timers[part] = setTimeout(() => (status[part] = ''), 2600);
+      await data.load();
+      return true;
     } catch (error) {
+      status[part] = '';
       say(problem(error));
       void data.load();
+      return false;
     }
+  }
+
+  // The address is typed, so it has a Save button while it differs from what's saved; leaving the
+  // field saves it too.
+  let address = $state<string | null>(null);
+  const addressDirty = $derived(!!me && address !== null && address !== me.address);
+  let addressSending = '';
+  async function saveAddress() {
+    if (!me || address === null || address === me.address || address === addressSending) return;
+    const value = address;
+    addressSending = value;
+    if (await save('handover', { address: value })) {
+      if (address === value) address = null;
+    }
+    addressSending = '';
   }
 
   async function step(body: { ready?: boolean; posted?: boolean; arrived?: boolean }, control?: Element | null) {
@@ -115,7 +139,11 @@
     } else void data.load();
   }
 
-  const wishes = (list: Wish[]) => save({ wishes: list });
+  const wishes = (list: Wish[]) => save('wishes', { wishes: list });
+  const nots = (list: Wish[]) => save('not', { not: list.map((w) => w.t) });
+  const asWishes = (list: string[]) => list.map((w) => ({ t: w, l: '' }));
+  // A host who takes part too, on this device: the tabs to their host page.
+  const own = $derived(view ? byGroup(view.groupKey) : undefined);
   const doorNumber = $derived(view ? Number(view.group.party.slice(8, 10)) : 0);
   const meta = (g: PersonView['group']) => [day(g.party) + (g.time ? `, ${g.time}` : ''), g.place, g.budget !== null ? t('event.about', { price: price(g.budget) }) : ''].filter(Boolean).join(' · ');
   const joined = $derived(view ? view.people.filter((p) => p.joined).length : 0);
@@ -131,6 +159,7 @@
 {:else if view && me}
   <main>
     {#if view.group.practice}<Practice until={view.group.deleteAt} />{/if}
+    {#if own?.host && own.me === key}<RoleTabs host={own.host} me={key} current="me" />{/if}
     <div class="cols">
       <div class="left">
         {#if view.stage}
@@ -159,7 +188,7 @@
               <section class="sec">
                 <h2>{t('me.wishesOf', { name: recipient.name })}</h2>
                 {#if recipient.wishes.length}<WishList wishes={recipient.wishes} />{:else}<p class="hint">{t('me.noWishes', { name: recipient.name })}</p>{/if}
-                {#if recipient.not}<p class="pn"><b>{t('me.not')}:</b> {recipient.not}</p>{/if}
+                {#if recipient.not.length}<p class="pn"><b>{t('me.not')}:</b> {recipient.not.join(' · ')}</p>{/if}
               </section>
               {#if recipient.handover === 'post'}
                 <section class="sec">
@@ -210,21 +239,39 @@
 
       <div class="right">
         <section class="sec">
-          <div class="sec-h"><h2>{t('me.handover')}</h2><span class="sp"></span><span class="saved" aria-live="polite">{saved}</span></div>
-          <ewo-segmented stretch label={t('me.handover')} value={me.handover} onchange={(e) => save({ handover: e.detail.value })}>
+          <div class="sec-h"><h2>{t('me.handover')}</h2>{@render state('handover')}</div>
+          <ewo-segmented stretch label={t('me.handover')} value={me.handover} onchange={(e) => save('handover', { handover: e.detail.value })}>
             <option value="party">{t('handover.party')}</option>
             <option value="post">{t('handover.post')}</option>
           </ewo-segmented>
           {#if me.handover === 'post'}
-            <ewo-field label={t('me.address')} multiline rows="4" autogrow maxlength="300" value={me.address} placeholder={t('me.addressPh')} hint={t('me.addressHint')} onchange={(e) => e.target === e.currentTarget && save({ address: e.currentTarget.value })}></ewo-field>
+            <ewo-field
+              label={t('me.address')}
+              multiline
+              rows="4"
+              autogrow
+              maxlength="300"
+              value={address ?? me.address}
+              placeholder={t('me.addressPh')}
+              hint={t('me.addressHint')}
+              oninput={(e) => (address = e.currentTarget.value)}
+              onchange={(e) => e.target === e.currentTarget && saveAddress()}
+            ></ewo-field>
+            {#if addressDirty}
+              <div class="save-row"><ewo-button size="sm" variant="primary" onclick={saveAddress}>{t('me.addressSave')}</ewo-button></div>
+            {/if}
           {/if}
         </section>
 
         <section class="sec">
-          <h2>{t('me.wishes')}</h2>
-          <WishList wishes={me.wishes} edit onchange={wishes} />
-          <ewo-field label={t('me.not')} value={me.not} maxlength="200" placeholder={t('me.notPh')} onchange={(e) => e.target === e.currentTarget && save({ not: e.currentTarget.value })}></ewo-field>
+          <div class="sec-h"><h2>{t('me.wishes')}</h2>{@render state('wishes')}</div>
           <p class="hint">{t('me.wishesHint')}</p>
+          <WishList wishes={me.wishes} edit onchange={wishes} />
+        </section>
+
+        <section class="sec">
+          <div class="sec-h"><h2>{t('me.not')}</h2>{@render state('not')}</div>
+          <WishList kind="not" wishes={asWishes(me.not)} edit onchange={nots} />
         </section>
 
         <section class="sec">
@@ -246,6 +293,16 @@
 {:else if data.failed}
   <main><ewo-empty heading={t('err.offline')} variant="dashed"><ewo-button slot="actions" onclick={() => data.load()}>{t('retry')}</ewo-button></ewo-empty></main>
 {/if}
+
+{#snippet state(part: Part)}
+  <span class="saved" class:on={status[part] === 'saved'} aria-live="polite">
+    {#if status[part] === 'saving'}
+      {t('me.saving')}
+    {:else if status[part] === 'saved'}
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" /></svg>{t('me.saved')}
+    {/if}
+  </span>
+{/snippet}
 
 <style>
   main {
@@ -341,9 +398,66 @@
     gap: 10px;
   }
 
+  .sec-h h2 {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Beside the heading of what just changed: a calm "Saving…", then a green "Saved" that fades. */
   .saved {
-    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 26px;
+    font-size: 13.5px;
+    font-weight: 700;
     color: var(--m-ink-3);
+    white-space: nowrap;
+  }
+
+  .saved.on {
+    padding: 0 10px 0 8px;
+    border-radius: 999px;
+    color: var(--ewo-ok);
+    background: color-mix(in oklab, var(--ewo-ok) 13%, var(--m-card));
+    animation: saved 2.6s ease both;
+  }
+
+  .saved svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  @keyframes saved {
+    0% {
+      opacity: 0;
+      transform: translateY(3px);
+    }
+    8%,
+    80% {
+      opacity: 1;
+      transform: none;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .saved.on {
+      animation: none;
+    }
+  }
+
+  .save-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: -4px;
   }
 
   .pn {

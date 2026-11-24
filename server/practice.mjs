@@ -41,8 +41,8 @@ const WISHES = {
 };
 
 const NOT = {
-  de: ['Keine Tassen mehr', '', 'Kein Alkohol', '', 'Nüsse (Allergie)', '', '', '', '', 'Nichts mit Duft', ''],
-  en: ['No more mugs', '', 'No alcohol', '', 'Nuts (allergy)', '', '', '', '', 'Nothing scented', ''],
+  de: [['Keine Tassen mehr'], [], ['Kein Alkohol', 'Nichts mit Duft'], [], ['Nüsse (Allergie)'], [], [], [], [], ['Nichts mit Duft'], []],
+  en: [['No more mugs'], [], ['No alcohol', 'Nothing scented'], [], ['Nuts (allergy)'], [], [], [], [], ['Nothing scented'], []],
 };
 
 const ADDRESSES = [

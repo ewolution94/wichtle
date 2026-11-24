@@ -57,7 +57,7 @@ export interface PersonView extends Common {
     chosen: boolean;
     address: string;
     wishes: Wish[];
-    not: string;
+    not: string[];
     opened: boolean;
     ready: boolean;
     arrived: boolean;
@@ -75,7 +75,7 @@ export interface Recipient {
   handover: Handover;
   address: string;
   wishes: Wish[];
-  not: string;
+  not: string[];
   budget: number | null;
 }
 
@@ -115,7 +115,7 @@ export interface HostView extends Common {
   unsealed: null | {
     until: number;
     pairs: { giver: string; recipient: string; from: string; to: string }[];
-    people: { id: string; name: string; handover: Handover; address: string; wishes: Wish[]; not: string }[];
+    people: { id: string; name: string; handover: Handover; address: string; wishes: Wish[]; not: string[] }[];
   };
 }
 

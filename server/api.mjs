@@ -34,6 +34,7 @@ import {
   groupView,
   hostView,
   log,
+  notsOf,
   person,
   personView,
   recipientView,
@@ -525,7 +526,7 @@ export function createApi({ store, now = Date.now, random = randomInt, timers = 
       case 'reset': {
         const p = find(body.id);
         store.dropPersonKeys(r.id, p.id);
-        Object.assign(p, { joinedAt: null, handover: null, address: '', wishes: [], not: '', wishesAt: null, openedAt: null, seenAt: null, changedAt: null, ready: null, arrived: null });
+        Object.assign(p, { joinedAt: null, handover: null, address: '', wishes: [], not: [], wishesAt: null, openedAt: null, seenAt: null, changedAt: null, ready: null, arrived: null });
         for (const s of [...r.streams]) {
           if (s.kind === 'p' && s.person === p.id) {
             end(s);
@@ -630,9 +631,9 @@ export function createApi({ store, now = Date.now, random = randomInt, timers = 
     const me = doc.people.find((p) => p.id === found.person);
     if (action === 'me') {
       const details = cleanDetails(body);
-      const before = JSON.stringify([me.handover, me.address, me.wishes, me.not]);
+      const before = JSON.stringify([me.handover, me.address, me.wishes, notsOf(me)]);
       Object.assign(me, details);
-      if (JSON.stringify([me.handover, me.address, me.wishes, me.not]) !== before) me.wishesAt = t;
+      if (JSON.stringify([me.handover, me.address, me.wishes, notsOf(me)]) !== before) me.wishesAt = t;
       commit(r);
       return json(res, 200, { ok: true });
     }

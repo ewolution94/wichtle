@@ -1,19 +1,24 @@
 <!--
   Wishes: a few lines, each with a link the person pasted themselves (shown as a plain link, never
-  fetched or rewritten). Editing: Enter adds a line (a link anywhere in it becomes the line's link),
-  × takes one away.
+  fetched or rewritten). Editing: Enter or Add adds a line (a link anywhere in it becomes the line's
+  link), × takes one away. `kind="not"` is the same list for what someone would rather not get: plain
+  words, no links, five at most.
 -->
 <script lang="ts">
   import type { Wish } from '../lib/api.ts';
   import { t } from '../lib/i18n.svelte.ts';
 
-  let { wishes, edit = false, onchange }: { wishes: Wish[]; edit?: boolean; onchange?: (next: Wish[]) => void } = $props();
+  let { wishes, edit = false, onchange, kind = 'wish' }: { wishes: Wish[]; edit?: boolean; onchange?: (next: Wish[]) => void; kind?: 'wish' | 'not' } = $props();
 
   let draft = $state('');
-  const MAX = 8;
+  const MAX = $derived(kind === 'wish' ? 8 : 5);
 
   /** "Socks https://shop.example/socks" → the words and the link. */
   function parse(text: string): Wish | null {
+    if (kind === 'not') {
+      const words = text.replace(/\s+/g, ' ').trim().slice(0, 120);
+      return words ? { t: words, l: '' } : null;
+    }
     const url = /https?:\/\/\S+/i.exec(text)?.[0] ?? '';
     const words = text.replace(url, '').replace(/\s+/g, ' ').trim().slice(0, 120);
     return words || url ? { t: words, l: url } : null;
@@ -55,17 +60,17 @@
   {#if wishes.length < MAX}
     <form class="add" onsubmit={add}>
       <ewo-field
-        label={t('wish.add')}
+        label={kind === 'wish' ? t('wish.add') : t('not.add')}
         value={draft}
-        maxlength="400"
-        placeholder={t('wish.addPh')}
-        hint={t('wish.addHint')}
+        maxlength={kind === 'wish' ? 400 : 120}
+        placeholder={kind === 'wish' ? t('wish.addPh') : t('not.addPh')}
+        hint={kind === 'wish' ? t('wish.addHint') : t('not.addHint')}
         oninput={(e) => (draft = e.currentTarget.value)}
       ></ewo-field>
       <ewo-button type="submit" disabled={!draft.trim()}>{t('wish.addButton')}</ewo-button>
     </form>
   {:else}
-    <p class="hint">{t('wish.full')}</p>
+    <p class="hint">{kind === 'wish' ? t('wish.full') : t('not.full')}</p>
   {/if}
 {/if}
 

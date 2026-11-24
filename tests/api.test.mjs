@@ -5,6 +5,7 @@ import { openStore } from '../server/store.mjs';
 import { createApi, STAGE_PER, STAGE_TAIL } from '../server/api.mjs';
 import { valid } from '../shared/draw.mjs';
 import { PRACTICE_CODE } from '../server/practice.mjs';
+import { notsOf } from '../server/model.mjs';
 
 let server, base, api, store, clock;
 const DAY = 86_400_000;
@@ -162,12 +163,25 @@ test('wishes, an address and the handover are the person’s own', async () => {
   assert.equal(p.me.handover, 'post');
   assert.equal(p.me.address, 'Carla Berg\nLindenstraße 4\n\n12345 Musterstadt');
   assert.deepEqual(p.me.wishes, [{ t: 'Tee', l: 'https://example.org/tee' }, { t: 'Socken', l: '' }]);
+  // "Rather not" is a short list; a single line (a page from before the list) is one item.
+  assert.deepEqual(p.me.not, ['Keine Tassen']);
+  assert.equal((await post(`/api/p/${carla}/me`, { not: ['Kein Alkohol', '  ', 'Nichts  mit Duft'] })).status, 200);
+  assert.deepEqual((await get(`/api/p/${carla}`)).me.not, ['Kein Alkohol', 'Nichts mit Duft']);
+  assert.equal((await post(`/api/p/${carla}/me`, { not: Array(6).fill('x') })).status, 400);
+  assert.equal((await post(`/api/p/${carla}/me`, { not: [{ t: 'x' }] })).status, 400);
+  assert.equal((await post(`/api/p/${carla}/me`, { not: ['x'.repeat(201)] })).status, 413);
   assert.equal((await post(`/api/p/${carla}/me`, { wishes: [{ t: 'x', l: 'javascript:alert(1)' }] })).status, 400);
   assert.equal((await post(`/api/p/${carla}/me`, { wishes: Array(9).fill({ t: 'x' }) })).status, 400);
   // Nobody else sees any of it: the group link shows names and who has joined.
   const g = await get(`/api/g/${group}`);
   assert.ok(!JSON.stringify(g).includes('Lindenstraße'));
   assert.ok(!JSON.stringify(g).includes('Tee'));
+});
+
+test('a "rather not" kept as one line of text, from before it was a list, reads as one line', () => {
+  assert.deepEqual(notsOf({ not: 'Keine Tassen' }), ['Keine Tassen']);
+  assert.deepEqual(notsOf({ not: '' }), []);
+  assert.deepEqual(notsOf({ not: ['Kein Alkohol'] }), ['Kein Alkohol']);
 });
 
 test('a quiet draw: nobody sees a pair until they reveal theirs, the host never does', async () => {

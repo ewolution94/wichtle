@@ -15,7 +15,7 @@
 
 import { possible } from '../shared/draw.mjs';
 
-export const LIMITS = { people: 100, name: 40, groupName: 60, place: 120, note: 600, wishes: 8, wish: 120, link: 500, address: 300, not: 200, log: 300 };
+export const LIMITS = { people: 100, name: 40, groupName: 60, place: 120, note: 600, wishes: 8, wish: 120, link: 500, address: 300, nots: 5, not: 200, log: 300 };
 const DAY = 86_400_000;
 /** Everything goes 30 days after the party; a practice group after a day. */
 export const KEEP_DAYS = 30;
@@ -95,6 +95,17 @@ export function cleanWishes(value) {
     .filter((w) => w.t || w.l);
 }
 
+/** What someone would rather not get: a few short lines. A string (a page from before the list) is one line. */
+export function cleanNots(value) {
+  if (value == null || value === '') return [];
+  const list = typeof value === 'string' ? [value] : value;
+  if (!Array.isArray(list) || list.length > LIMITS.nots) throw bad('not');
+  return list.map((n) => text(n, LIMITS.not, 'not')).filter(Boolean);
+}
+
+/** A person's "rather not" as a list: groups made before 2026-11-24 kept it as one line of text. */
+export const notsOf = (p) => (Array.isArray(p.not) ? p.not : p.not ? [p.not] : []);
+
 /** A group's settings from the page; only the fields present change. */
 export function cleanSettings(body, current, { now = Date.now(), creating = false } = {}) {
   const out = {};
@@ -145,7 +156,7 @@ export function cleanDetails(body) {
     if (out.address.split('\n').length > 8) throw bad('address');
   }
   if ('wishes' in body) out.wishes = cleanWishes(body.wishes);
-  if ('not' in body) out.not = text(body.not, LIMITS.not, 'not');
+  if ('not' in body) out.not = cleanNots(body.not);
   return out;
 }
 
@@ -159,7 +170,7 @@ export function person(id, name, extra = {}) {
     handover: null,
     address: '',
     wishes: [],
-    not: '',
+    not: [],
     wishesAt: null,
     openedAt: null,
     seenAt: null,
@@ -221,7 +232,7 @@ export function personView(doc, row, id, groupKey, stage) {
       chosen: me.handover !== null,
       address: me.address,
       wishes: me.wishes,
-      not: me.not,
+      not: notsOf(me),
       opened: !!me.openedAt,
       ready: !!me.ready,
       arrived: !!me.arrived,
@@ -245,7 +256,7 @@ export function recipientView(doc, recipient, budget = doc.budget) {
     handover: handoverOf(doc, recipient),
     address: post ? recipient.address : '',
     wishes: recipient.wishes,
-    not: recipient.not,
+    not: notsOf(recipient),
     budget,
   };
 }
@@ -284,7 +295,7 @@ export function hostView(doc, row, groupKey, { stage, unsealed, dummyKeys }) {
     view.unsealed = {
       until: unsealed.until,
       pairs: doc.draw ? Object.entries(doc.draw.pairs).map(([g, r]) => ({ giver: g, recipient: r, from: name(g), to: name(r) })) : [],
-      people: doc.people.map((p) => ({ id: p.id, name: p.name, handover: handoverOf(doc, p), address: p.address, wishes: p.wishes, not: p.not })),
+      people: doc.people.map((p) => ({ id: p.id, name: p.name, handover: handoverOf(doc, p), address: p.address, wishes: p.wishes, not: notsOf(p) })),
     };
   }
   return view;

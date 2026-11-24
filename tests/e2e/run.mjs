@@ -161,6 +161,14 @@ const tests = {
     const group = keyOf(groupLink);
     assert.ok(group && group !== hostKey);
 
+    // Anna takes part too: the tabs at the top take her to her own page and back.
+    await host.getByRole('link', { name: 'My page' }).click();
+    await host.waitForURL(/\/p\//);
+    await shown(host, 'Hi Anna');
+    await host.getByRole('link', { name: 'Organising' }).click();
+    await host.waitForURL(/\/h\//);
+    assert.equal(keyOf(host.url()), hostKey);
+
     // Ben claims on his phone; the host's village lights his window without a reload.
     const ben = await t.page(PHONE);
     await ben.goto(`${base}/g/${group}`);
@@ -207,15 +215,30 @@ const tests = {
     await field(page, 'A wish').fill('A good book');
     await field(page, 'A wish').press('Enter');
     await field(page, 'A wish').fill('https://example.org/scarf');
-    await page.getByRole('button', { name: 'Add', exact: true }).click();
-    await field(page, 'Rather not').fill('No mugs');
-    await field(page, 'Rather not').press('Tab');
+    const add = (label) => page.locator('form', { has: field(page, label) }).getByRole('button', { name: 'Add' });
+    await add('A wish').click();
+    // Each section says it saved, beside its own heading.
+    const section = (heading) => page.locator('section', { has: page.getByRole('heading', { name: heading, exact: true }) });
+    await section('My wishes').getByText('Saved').waitFor();
+    // "Rather not" works like the wishes: a line, Add (or Enter), and × to take one away.
+    const not = "Something you'd rather not get";
+    await field(page, not).fill('No mugs');
+    await field(page, not).press('Enter');
+    await field(page, not).fill('Nothing scented');
+    await add(not).click();
+    await section('Rather not').getByText('Saved').waitFor();
+    await field(page, not).fill('Socks');
+    await field(page, not).press('Enter');
+    await until(async () => (await api.get(`/p/${carla}`)).me.not.length === 3, 'the third line');
+    await page.getByRole('button', { name: 'Remove Socks' }).click();
     await page.getByRole('radio', { name: 'By post' }).click();
     await field(page, 'My address').fill('Carla Example\nMain Street 1\n12345 Town');
-    await field(page, 'My address').press('Tab');
+    await page.getByRole('button', { name: 'Save address' }).click();
+    await section('My gift reaches me').getByText('Saved').waitFor();
+    await until(async () => (await page.getByRole('button', { name: 'Save address' }).count()) === 0, 'the address saved');
     await until(async () => {
       const me = (await api.get(`/p/${carla}`)).me;
-      return me.wishes.length === 2 && me.not === 'No mugs' && me.handover === 'post' && me.address.includes('Main Street');
+      return me.wishes.length === 2 && me.not.join() === 'No mugs,Nothing scented' && me.handover === 'post' && me.address.includes('Main Street');
     }, 'Carla saved');
     // The link is kept as she pasted it, shown by its host, never fetched.
     await shown(page, 'example.org');
@@ -233,7 +256,7 @@ const tests = {
     await giver.getByRole('button', { name: /^Door \d+: open it/ }).click();
     await giver.getByRole('heading', { name: 'You give to Carla' }).waitFor();
     await shown(giver, 'A good book');
-    await shown(giver, 'No mugs');
+    await shown(giver, 'No mugs · Nothing scented');
     await shown(giver, 'Main Street 1');
 
     // Carla changes a wish; her giver sees that it changed.

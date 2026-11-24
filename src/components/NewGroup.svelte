@@ -198,6 +198,8 @@
     display: grid;
     grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
     gap: 12px;
+    /* A field is a grid of its own: stretched to its neighbour's height it would spread its label and box apart. */
+    align-items: start;
   }
 
   .fld {

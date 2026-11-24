@@ -15,10 +15,11 @@
   import Practice from './Practice.svelte';
   import LiveStage from './LiveStage.svelte';
   import WishList from './WishList.svelte';
+  import RoleTabs from './RoleTabs.svelte';
   import { ApiError, post, type HostPerson, type HostView, type LogLine } from '../lib/api.ts';
   import { Loader } from '../lib/loader.svelte.ts';
   import { byGroup, byKey, forget, remember } from '../lib/known.svelte.ts';
-  import { go, link, linkTo } from '../lib/router.svelte.ts';
+  import { go, linkTo } from '../lib/router.svelte.ts';
   import { act, copy, say } from '../lib/ui.svelte.ts';
   import { t } from '../lib/i18n.svelte.ts';
   import { clock, day, dayOf, list, parseBudget, price, stamp, today } from '../lib/format.ts';
@@ -453,7 +454,6 @@
   <ewo-connection state={data.conn}></ewo-connection>
   {#if view}
     <span class="chip">{t('host.chip')}</span>
-    <ewo-button size="sm" onclick={() => (tools = true)}>{t('tools.open')}</ewo-button>
   {/if}
 </Header>
 
@@ -469,10 +469,18 @@
       </div>
     {/if}
 
-    <div class="intro">
-      <p class="eye">{t('host.eye')}</p>
-      <h1 class="disp">{g.name}</h1>
-      <p class="meta">{meta(g)}</p>
+    {#if mine?.me}<RoleTabs host={key} me={mine.me} current="host" />{/if}
+
+    <div class="top">
+      <div class="intro">
+        <p class="eye">{t('host.eye')}</p>
+        <h1 class="disp">{g.name}</h1>
+        <p class="meta">{meta(g)}</p>
+      </div>
+      <ewo-button class="tools-open" size="lg" onclick={() => (tools = true)}>
+        <svg {...{ slot: 'start' }} viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="17" r="2" /></svg>
+        {t('tools.open')}
+      </ewo-button>
     </div>
 
     <div class="cols">
@@ -628,9 +636,6 @@
             <ewo-button onclick={() => copy(reminder, t('remind.copied'))}>{t('remind.copy')}</ewo-button>
             <p class="hint">{t('remind.hint')}</p>
           {/if}
-          {#if mine?.me}
-            <ewo-button variant="quiet" href={`/p/${mine.me}`} onclick={link(`/p/${mine.me}`)}>{t('host.own')}</ewo-button>
-          {/if}
         </section>
 
         <section class="card">
@@ -672,7 +677,7 @@
           <p>{personInside.handover === 'post' ? personInside.address || t('person.noAddress') : t('handover.party')}</p>
           <p class="lbl">{t('me.wishes')}</p>
           {#if personInside.wishes.length}<WishList wishes={personInside.wishes} />{:else}<p class="hint">{t('person.noWishes')}</p>{/if}
-          {#if personInside.not}<p><b>{t('me.not')}:</b> {personInside.not}</p>{/if}
+          {#if personInside.not.length}<p><b>{t('me.not')}:</b> {personInside.not.join(' · ')}</p>{/if}
         </div>
       {/if}
       <form class="row" onsubmit={rename}>
@@ -814,9 +819,27 @@
     flex-wrap: wrap;
   }
 
+  /* The group's name, and the host tools beside it where the host looks first. */
+  .top {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px 24px;
+  }
+
   .intro {
     display: grid;
     gap: 6px;
+    flex: 1 1 420px;
+    min-width: 0;
+  }
+
+  .tools-open svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
   }
 
   .eye {
@@ -978,6 +1001,8 @@
     display: grid;
     grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
     gap: 12px;
+    /* A field is a grid of its own: stretched to its neighbour's height it would spread its label and box apart. */
+    align-items: start;
   }
 
   .inside {
