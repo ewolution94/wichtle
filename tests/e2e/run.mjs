@@ -132,9 +132,9 @@ const revealed = (page, timeout = 6000) => page.getByRole('heading', { name: /^Y
 /** Pairs as names: { giver: recipient }. */
 const pairsOf = (inside) => Object.fromEntries(inside.pairs.map((p) => [p.from, p.to]));
 
-/** Opens Host tools and runs `run` while the sheet is open. */
-async function tools(page, run) {
-  await page.getByRole('button', { name: 'Host tools' }).click();
+/** Opens one of the host tools from the list on the page and runs `run` while its sheet is open. */
+async function tools(page, name, run) {
+  await page.getByRole('button', { name, exact: true }).click();
   await run();
 }
 
@@ -153,7 +153,7 @@ const tests = {
     await host.getByRole('button', { name: 'Start the group' }).click();
     await host.waitForURL(/\/h\//);
     const hostKey = keyOf(host.url());
-    await shown(host, '1 of 4 have joined');
+    await shown(host, 'Send the group link');
     const view = await api.host(hostKey);
     assert.equal(view.group.budget, 2000);
     assert.equal(view.group.place, 'The kitchen');
@@ -212,13 +212,15 @@ const tests = {
     const page = await t.page(DESK);
     await page.goto(`${base}/p/${carla}`);
     await shown(page, 'Hi Carla');
+    // Her next step is her wishes; they open in a sheet with the rather-nots and the address.
+    await page.getByRole('button', { name: 'Add my wishes' }).click();
     await field(page, 'A wish').fill('A good book');
     await field(page, 'A wish').press('Enter');
     await field(page, 'A wish').fill('https://example.org/scarf');
     const add = (label) => page.locator('form', { has: field(page, label) }).getByRole('button', { name: 'Add' });
     await add('A wish').click();
     // Each section says it saved, beside its own heading.
-    const section = (heading) => page.locator('section', { has: page.getByRole('heading', { name: heading, exact: true }) });
+    const section = (heading) => page.locator('ewo-sheet[open] section', { has: page.getByRole('heading', { name: heading, exact: true }) });
     await section('My wishes').getByText('Saved').waitFor();
     // "Rather not" works like the wishes: a line, Add (or Enter), and × to take one away.
     const not = "Something you'd rather not get";
@@ -242,6 +244,10 @@ const tests = {
     }, 'Carla saved');
     // The link is kept as she pasted it, shown by its host, never fetched.
     await shown(page, 'example.org');
+    await page.getByRole('button', { name: 'Done' }).click();
+    await settled(page);
+    // Her summary on the page says what she saved.
+    await shown(page, 'No mugs · Nothing scented');
 
     // The host sees that Carla has wishes and wants post, never what they are.
     const before = await api.host(made.host);
@@ -260,9 +266,12 @@ const tests = {
     await shown(giver, 'Main Street 1');
 
     // Carla changes a wish; her giver sees that it changed.
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await field(page, 'A wish').fill('Warm socks');
     await field(page, 'A wish').press('Enter');
     await until(async () => (await api.get(`/p/${carla}`)).me.wishes.length === 3, 'the third wish');
+    await page.getByRole('button', { name: 'Done' }).click();
+    await settled(page);
     // Opened before: the door opens again by itself on a reload.
     await giver.reload();
     await shown(giver, 'Carla changed their wishes since you last looked.');
@@ -284,7 +293,7 @@ const tests = {
     const made = await api.make({ names: ['Ben', 'Carla', 'David', 'Elif', 'Finn'] });
     const host = await t.page(DESK);
     await host.goto(`${base}/h/${made.host}`);
-    await shown(host, '1 of 6 have joined');
+    await shown(host, 'Send the group link');
     await host.getByRole('button', { name: 'Ben', exact: true }).click();
     await host.getByRole('button', { name: 'Carla', exact: true }).click();
     await host.getByRole('button', { name: 'Tie into a household' }).click();
@@ -306,7 +315,8 @@ const tests = {
     await host.getByRole('button', { name: 'Tie into a household' }).click();
     await host.getByRole('button', { name: 'Ben & Carla', exact: true }).waitFor();
 
-    // Anyone, drawn quietly from the page.
+    // Anyone, drawn quietly from the page: how the draw goes is behind "Change" in the next step.
+    await host.getByRole('button', { name: 'Change', exact: true }).click();
     await host.getByRole('radio', { name: 'Anyone' }).click();
     await until(async () => (await api.host(made.host)).group.shape === 'any', 'the any shape');
     await host.getByRole('button', { name: 'Draw', exact: true }).click();
@@ -419,7 +429,7 @@ const tests = {
     await host.goto(`${base}/h/${made.host}`);
     await shown(host, 'The draw is sealed');
     assert.equal(await host.getByRole('columnheader', { name: 'Gives to' }).count(), 0);
-    await tools(host, async () => {
+    await tools(host, 'Look inside the draw', async () => {
       await field(host, 'Unseal code').fill('wrong-one');
       await host.getByRole('button', { name: 'Unseal', exact: true }).click();
       await shown(host, "That's not the code. 4 more tries.");
@@ -435,7 +445,7 @@ const tests = {
     await host.getByRole('status').getByRole('button', { name: 'Seal again' }).click();
     await until(async () => (await host.getByRole('columnheader', { name: 'Gives to' }).count()) === 0, 'sealed');
     await shown(host, 'Sealed again');
-    await tools(host, async () => {
+    await tools(host, 'Look inside the draw', async () => {
       await field(host, 'Unseal code').fill(CODE);
       await host.getByRole('button', { name: 'Unseal', exact: true }).click();
     });
@@ -446,10 +456,15 @@ const tests = {
 
     // Five wrong codes in a row (the right one resets the count) lock it, even for the right code.
     for (let i = 0; i < 5; i++) await api.post(`/h/${made.host}/unseal`, { code: 'nope-nope' });
-    await tools(host, async () => {
+    await tools(host, 'Look inside the draw', async () => {
       await field(host, 'Unseal code').fill(CODE);
       await host.getByRole('button', { name: 'Unseal', exact: true }).click();
       await shown(host, 'Too many wrong codes');
+    });
+    // The log says so, under its own tool.
+    await host.keyboard.press('Escape');
+    await settled(host);
+    await tools(host, 'Log', async () => {
       await shown(host, 'Five wrong codes: locked for 15 minutes');
     });
   },
@@ -479,7 +494,7 @@ const tests = {
     await shown(page, "Here's your new host page");
     assert.equal((await fetch(`${base}/api/h/${made.host}`)).status, 404);
 
-    await tools(page, async () => {
+    await tools(page, 'Your host link', async () => {
       await page.getByRole('button', { name: 'Make a new host link' }).click();
       await page.getByRole('button', { name: 'Make a new link' }).click();
     });
@@ -487,7 +502,7 @@ const tests = {
     assert.equal((await fetch(`${base}/api/h/${second}`)).status, 404);
     const third = keyOf(page.url());
 
-    await tools(page, async () => {
+    await tools(page, 'Your host link', async () => {
       await page.getByRole('button', { name: 'Change the code' }).click();
       await field(page, 'Current code').fill(CODE);
       await field(page, 'New code').fill('holly-and-ivy');
@@ -508,8 +523,7 @@ const tests = {
     await shown(person, 'Hi Ben');
     const host = await t.page(DESK);
     await host.goto(`${base}/h/${made.host}`);
-    await tools(host, async () => {
-      await host.getByRole('button', { name: 'Delete now' }).click();
+    await tools(host, 'Delete the group', async () => {
       await host.getByRole('button', { name: 'Delete everything' }).click();
     });
     await host.waitForURL(`${base}/`);
@@ -528,7 +542,7 @@ const tests = {
     await host.waitForURL(/\/h\//);
     await shown(host, 'The colleagues are pretend. The unseal code is wichtel.');
     // At 60 times the pace, the late one joins after six seconds.
-    await shown(host, '10 of 10 have joined', 15000);
+    await shown(host, 'All 10 have claimed their name', 15000);
     assert.equal(await host.getByText('pretend', { exact: true }).count(), 9);
 
     // A colleague's page, as they see it.
@@ -544,7 +558,7 @@ const tests = {
     await host.getByRole('button', { name: 'Back to the group' }).click({ timeout: 9000 });
     // The quick colleagues open their doors within seconds; the two slow ones and Eric don't.
     await until(async () => (await api.host(keyOf(host.url()))).people.filter((p) => p.opened).length >= 7, 'the colleagues open', 12000);
-    await tools(host, async () => {
+    await tools(host, 'Look inside the draw', async () => {
       await field(host, 'Unseal code').fill('wichtel');
       await host.getByRole('button', { name: 'Unseal', exact: true }).click();
     });

@@ -1,10 +1,13 @@
 <!--
-  The host's page (the host link, kept on this device): who has joined, households (pick houses in the
-  village to tie them together), how the draw goes and the draw itself; after it who has opened their
-  door and got their gift ready, never who drew whom. Names can still come and go after the draw:
-  either the draw is fitted (only the people next to them change) or everyone draws again. Host tools
-  hold the unseal (every pair, address and wish for 30 minutes, with the code), the log, the code, a
-  new host link and deleting the group.
+  The host's page (the host link, kept on this device). It opens with where the group stands (six
+  steps, from the invite to the party) and the one thing to do now, with its button: send the link,
+  remind whoever is missing, draw, remind whoever hasn't opened their door or got their gift ready.
+  Under it the village (pick houses to tie households) and everyone in a table (rename, reset,
+  remove, add); beside it the invite, the party and the host tools as a list: the unseal (every
+  pair, address and wish for 30 minutes, with the code), the log, the host link and its code,
+  drawing again and deleting the group. Never who drew whom, unless unsealed. Names can still come
+  and go after the draw: either the draw is fitted (only the people next to them change) or
+  everyone draws again.
 -->
 <script lang="ts">
   import { onMount, onDestroy, untrack } from 'svelte';
@@ -16,6 +19,8 @@
   import LiveStage from './LiveStage.svelte';
   import WishList from './WishList.svelte';
   import RoleTabs from './RoleTabs.svelte';
+  import Steps from './Steps.svelte';
+  import Now from './Now.svelte';
   import { ApiError, post, type HostPerson, type HostView, type LogLine } from '../lib/api.ts';
   import { Loader } from '../lib/loader.svelte.ts';
   import { byGroup, byKey, forget, remember } from '../lib/known.svelte.ts';
@@ -337,7 +342,6 @@
 
   // ---- host tools ----
 
-  let tools = $state(false);
   let code = $state('');
   let unsealButton: HTMLElement | undefined = $state();
   let oldCode = $state('');
@@ -352,7 +356,7 @@
     token = res.token;
     tokenUntil = res.until;
     code = '';
-    tools = false;
+    tool = '';
     clearTimeout(sealTimer);
     sealTimer = setTimeout(() => seal(false), Math.max(0, res.until - (Date.now() + data.offset)));
     void data.load();
@@ -392,7 +396,7 @@
             const res = await act(c, () => post<{ host: string }>(`/h/${key}/rekey`));
             if (!res || !view) return;
             remember({ group: view.groupKey, host: res.host });
-            tools = false;
+            tool = '';
             say(t('tools.rekeyed'), 'ok');
             go(`/h/${res.host}`, { replace: true });
           },
@@ -415,7 +419,7 @@
             const res = await act(c, () => post(`/h/${key}/delete`).then(() => true));
             if (!res) return;
             forget(group);
-            tools = false;
+            tool = '';
             say(t('tools.deleted'), 'ok');
             go('/', { replace: true });
           },
@@ -446,8 +450,89 @@
     return words[l.t] ?? l.t;
   };
 
-  const meta = (d: HostView['group']) => [day(d.party) + (d.time ? `, ${d.time}` : ''), d.place, d.budget !== null ? t('event.about', { price: price(d.budget) }) : ''].filter(Boolean).join(' · ');
   const handoverWord = (h: HostPerson['handover']) => (h === 'post' ? t('handover.postShort') : t('handover.partyShort'));
+
+  // ---- where the group stands: the step line and the one thing to do now ----
+
+  type Phase = 'invite' | 'names' | 'draw' | 'doors' | 'gifts' | 'party';
+  const PHASES: Phase[] = ['invite', 'names', 'draw', 'doors', 'gifts', 'party'];
+  const missing = $derived(view ? view.people.filter((p) => !p.joined) : []);
+  const closed = $derived(view ? view.people.filter((p) => !p.opened) : []);
+  const shopping = $derived(view ? view.people.filter((p) => !p.ready) : []);
+  const phase = $derived.by<Phase>(() => {
+    if (!view) return 'invite';
+    if (!drawn) {
+      if (!view.people.some((p) => p.joined && !p.host)) return 'invite';
+      return missing.length ? 'names' : 'draw';
+    }
+    if (closed.length) return 'doors';
+    return shopping.length ? 'gifts' : 'party';
+  });
+  const steps = $derived.by(() => {
+    if (!view || !g) return [];
+    const all = view.people.length;
+    return [
+      { label: t('hstep.invite') },
+      { label: t('hstep.names'), sub: t('drawn.of', { n: joined, all }) },
+      { label: t('hstep.draw'), sub: view.draw ? stamp(view.draw.at) : '' },
+      { label: t('hstep.doors'), sub: drawn ? t('drawn.of', { n: opened, all }) : '' },
+      { label: t('hstep.gifts'), sub: drawn ? t('drawn.of', { n: ready, all }) : '' },
+      { label: t('hstep.party'), sub: day(g.party) },
+    ];
+  });
+  /** Up to three names, or nothing: a title names people only while it stays short. */
+  const few = (ps: HostPerson[]) => (ps.length && ps.length <= 3 ? list(ps.map((p) => p.name)) : '');
+  const nowTitle = $derived.by(() => {
+    if (!view || !g) return '';
+    const all = view.people.length;
+    switch (phase) {
+      case 'invite':
+        return t('hnow.invite');
+      case 'names':
+        return few(missing) ? t('hnow.names', { names: few(missing) }) : t('hnow.namesMany', { n: missing.length });
+      case 'draw':
+        return t('hnow.draw');
+      case 'doors':
+        return few(closed) ? t('hnow.doors', { names: few(closed) }) : t('hnow.doorsMany', { n: closed.length });
+      case 'gifts':
+        return t('hnow.gifts', { ready, all });
+      default:
+        return t('hnow.party');
+    }
+  });
+  const nowBody = $derived.by(() => {
+    if (!view || !g) return '';
+    const all = view.people.length;
+    switch (phase) {
+      case 'invite':
+        return t('hnow.inviteBody');
+      case 'names':
+        return t('hnow.namesBody', { joined, all });
+      case 'draw':
+        return t('hnow.drawBody', { all });
+      case 'doors':
+        return t('hnow.doorsBody', { opened, all });
+      case 'gifts':
+        return few(shopping) ? t('hnow.giftsBody', { names: few(shopping), date: day(g.party) }) : t('hnow.giftsBodyMany', { date: day(g.party) });
+      default:
+        return t('hnow.partyBody', { date: day(g.party) });
+    }
+  });
+  // How the draw goes (shape and moment): one line in the card, the controls behind "Change".
+  let how = $state(false);
+
+  // ---- host tools: one sheet, opened at the tool picked from the list on the page ----
+
+  type Tool = 'unseal' | 'log' | 'link';
+  let tool = $state<Tool | ''>('');
+  const toolTitle = (x: Tool | '') => (x === 'unseal' ? t('tools.unsealTitle') : x === 'log' ? t('tools.logTitle') : t('host.keepTitle'));
+  const ICONS = {
+    unseal: 'M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12zM12 9.2a2.8 2.8 0 1 0 0 5.6a2.8 2.8 0 1 0 0-5.6z',
+    log: 'M6 5.5h12M6 10h12M6 14.5h8M6 19h5',
+    link: 'M8.5 18a3.5 3.5 0 1 0 0-7a3.5 3.5 0 1 0 0 7zM11 12.5l8-8M16.5 7l2.5 2.5M14 9.5l2 2',
+    redraw: 'M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4.5H15',
+    delete: 'M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13',
+  };
 </script>
 
 <Header title={view?.group.name}>
@@ -471,24 +556,73 @@
 
     {#if mine?.me}<RoleTabs host={key} me={mine.me} current="host" />{/if}
 
-    <div class="top">
-      <div class="intro">
-        <p class="eye">{t('host.eye')}</p>
-        <h1 class="disp">{g.name}</h1>
-        <p class="meta">{meta(g)}</p>
-      </div>
-      <ewo-button class="tools-open" size="lg" onclick={() => (tools = true)}>
-        <svg {...{ slot: 'start' }} viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="17" r="2" /></svg>
-        {t('tools.open')}
-      </ewo-button>
-    </div>
+    <h1 class="vh">{g.name}</h1>
+    <Steps label={t('hstep.label')} items={steps} now={PHASES.indexOf(phase)} />
 
     <div class="cols">
       <div class="left">
-        <section class="card vcard">
-          <div class="sec-h">
-            <h3>{drawn ? t('host.villageDrawn', { n: opened, all: view.people.length }) : t('host.villageJoined', { n: joined, all: view.people.length })}</h3>
-          </div>
+        <div class="o-now">
+          <Now title={nowTitle}>
+            <p class="body">{nowBody}</p>
+            {#if !drawn}
+              {#if checkText}<div class="banner warn">{checkText}</div>{/if}
+              <div class="how">
+                <span>{g.shape === 'chain' ? t('draw.chain') : t('draw.any')} · {g.moment === 'quiet' ? t('draw.quiet') : t('draw.live')}</span>
+                <ewo-button size="sm" variant="quiet" aria-expanded={how} onclick={() => (how = !how)}>{how ? t('hnow.howDone') : t('hnow.how')}</ewo-button>
+              </div>
+              {#if how}
+                <div class="how-set">
+                  <div class="fld">
+                    <span class="lbl">{t('draw.shape')}</span>
+                    <ewo-segmented stretch label={t('draw.shape')} value={g.shape} onchange={(e) => setting({ shape: e.detail.value })}>
+                      <option value="chain">{t('draw.chain')}</option>
+                      <option value="any">{t('draw.any')}</option>
+                    </ewo-segmented>
+                    <p class="hint">{g.shape === 'chain' ? t('draw.chainHint') : t('draw.anyHint')}</p>
+                  </div>
+                  <div class="fld">
+                    <span class="lbl">{t('draw.moment')}</span>
+                    <ewo-segmented stretch label={t('draw.moment')} value={g.moment} onchange={(e) => setting({ moment: e.detail.value })}>
+                      <option value="quiet">{t('draw.quiet')}</option>
+                      <option value="live">{t('draw.live')}</option>
+                    </ewo-segmented>
+                    <p class="hint">{g.moment === 'quiet' ? t('draw.quietHint') : t('draw.liveHint')}</p>
+                  </div>
+                </div>
+              {/if}
+              {#if sure}
+                <div class="sure">
+                  <p><b>{t('draw.sure', { n: view.people.length })}</b></p>
+                  <div class="acts">
+                    <ewo-button bind:this={drawButton} variant="primary" onclick={makeDraw}>{g.moment === 'live' ? t('draw.goLive') : t('draw.go')}</ewo-button>
+                    <ewo-button variant="quiet" onclick={() => (sure = false)}>{t('draw.notYet')}</ewo-button>
+                  </div>
+                </div>
+              {:else}
+                <div class="acts">
+                  {#if phase === 'invite'}
+                    <ewo-button variant="primary" size="lg" onclick={() => copy(linkTo('g', view.groupKey), t('copy.done'))}>{t('hnow.copyLink')}</ewo-button>
+                  {:else if phase === 'names' && reminder}
+                    <ewo-button variant="primary" size="lg" onclick={() => copy(reminder, t('remind.copied'))}>{t('remind.copy')}</ewo-button>
+                  {/if}
+                  <ewo-button variant={phase === 'draw' ? 'primary' : 'default'} size="lg" disabled={!view.check.ok} onclick={() => (sure = true)}>{t('draw.button')}</ewo-button>
+                </div>
+              {/if}
+            {:else}
+              {#if reminder && phase !== 'party'}
+                <div class="acts"><ewo-button variant="primary" size="lg" onclick={() => copy(reminder, t('remind.copied'))}>{t('remind.copy')}</ewo-button></div>
+              {/if}
+              {#if view.draw}
+                <p class="hint">
+                  {t('hnow.drawnLine', { when: stamp(view.draw.at), shape: view.draw.shape === 'chain' ? t('draw.chain') : t('draw.any') })}{#if view.draw.round > 1} · {t('drawn.round', { n: view.draw.round })}{/if}.
+                  {#if !inside}{t('drawn.sealed')}{/if}
+                </p>
+              {/if}
+            {/if}
+          </Now>
+        </div>
+
+        <section class="card vcard o-village" aria-label={t('village.title')}>
           <Village {units} label={t('village.label')} selectable selected={picked} onpick={pick} />
           <div class="house-bar">
             {#if picked.size}
@@ -574,81 +708,27 @@
       </div>
 
       <div class="right">
-        {#if !view.draw}
-          <section class="card o-draw">
-            <h3>{t('draw.title')}</h3>
-            <div class="fld">
-              <span class="lbl">{t('draw.shape')}</span>
-              <ewo-segmented stretch label={t('draw.shape')} value={g.shape} onchange={(e) => setting({ shape: e.detail.value })}>
-                <option value="chain">{t('draw.chain')}</option>
-                <option value="any">{t('draw.any')}</option>
-              </ewo-segmented>
-              <p class="hint">{g.shape === 'chain' ? t('draw.chainHint') : t('draw.anyHint')}</p>
-            </div>
-            <div class="fld">
-              <span class="lbl">{t('draw.moment')}</span>
-              <ewo-segmented stretch label={t('draw.moment')} value={g.moment} onchange={(e) => setting({ moment: e.detail.value })}>
-                <option value="quiet">{t('draw.quiet')}</option>
-                <option value="live">{t('draw.live')}</option>
-              </ewo-segmented>
-              <p class="hint">{g.moment === 'quiet' ? t('draw.quietHint') : t('draw.liveHint')}</p>
-            </div>
-            {#if checkText}
-              <div class="banner warn">{checkText}</div>
-            {:else}
-              <p class="hint">{joined < view.people.length ? t('draw.notAll', { n: view.people.length - joined }) : t('draw.all')}</p>
-            {/if}
-            {#if sure}
-              <div class="sure">
-                <p><b>{t('draw.sure', { n: view.people.length })}</b></p>
-                <div class="acts">
-                  <ewo-button bind:this={drawButton} variant="primary" onclick={makeDraw}>{g.moment === 'live' ? t('draw.goLive') : t('draw.go')}</ewo-button>
-                  <ewo-button variant="quiet" onclick={() => (sure = false)}>{t('draw.notYet')}</ewo-button>
-                </div>
-              </div>
-            {:else}
-              <ewo-button variant="primary" size="lg" stretch disabled={!view.check.ok} onclick={() => (sure = true)}>{t('draw.button')}</ewo-button>
-            {/if}
-          </section>
-        {:else}
-          <section class="card o-draw">
-            <h3>{t('drawn.title')}</h3>
-            <dl class="dl">
-              <dt>{t('drawn.when')}</dt>
-              <dd>{stamp(view.draw.at)}{#if view.draw.round > 1} · {t('drawn.round', { n: view.draw.round })}{/if}</dd>
-              <dt>{t('draw.shape')}</dt>
-              <dd>{view.draw.shape === 'chain' ? t('draw.chain') : t('draw.any')}</dd>
-              <dt>{t('drawn.opened')}</dt>
-              <dd>{t('drawn.of', { n: opened, all: view.people.length })}</dd>
-              <dt>{t('drawn.ready')}</dt>
-              <dd>{t('drawn.of', { n: ready, all: view.people.length })}</dd>
-            </dl>
-            {#if !inside}<p class="hint">{t('drawn.sealed')}</p>{/if}
-            <ewo-button variant="quiet" onclick={redraw}>{t('drawn.redraw')}</ewo-button>
-          </section>
-        {/if}
-
-        <section class="card">
+        <section class="card o-invite">
           <h3>{t('invite.title')}</h3>
-          <p>{t('invite.body')}</p>
+          <p class="hint">{t('invite.body')}</p>
           <div class="linkrow"><code>{linkTo('g', view.groupKey)}</code><ewo-button size="sm" variant="primary" onclick={() => copy(linkTo('g', view.groupKey), t('copy.done'))}>{t('copy.link')}</ewo-button></div>
-          {#if reminder}
-            <ewo-button onclick={() => copy(reminder, t('remind.copied'))}>{t('remind.copy')}</ewo-button>
-            <p class="hint">{t('remind.hint')}</p>
-          {/if}
         </section>
 
-        <section class="card">
+        <section class="card o-party">
           <div class="sec-h"><h3>{t('event.title')}</h3><span class="sp"></span><ewo-button size="sm" variant="quiet" onclick={openEdit}>{t('edit.open')}</ewo-button></div>
           <Event group={g} />
           <p class="hint">{g.handover === 'post' ? t('edit.handoverPost') : t('edit.handoverParty')}</p>
         </section>
 
-        <section class="card keep">
-          <h3>{t('host.keepTitle')}</h3>
-          <p class="hint">{t('host.keep')}</p>
-          <div class="linkrow"><code>{linkTo('h', key)}</code><ewo-button size="sm" onclick={() => copy(linkTo('h', key), t('copy.done'))}>{t('copy.link')}</ewo-button></div>
-          <p class="hint">{t('group.deleted', { date: dayOf(g.deleteAt) })}</p>
+        <section class="card o-tools">
+          <h3>{t('tools.title')}</h3>
+          <div class="trows">
+            {@render toolRow('unseal', t('tools.unsealTitle'), inside ? t('tools.unsealedLine', { time: clock(tokenUntil || inside.until) }) : t('tools.unsealRow'), () => (tool = 'unseal'))}
+            {@render toolRow('log', t('tools.logTitle'), t('tools.logRow'), () => (tool = 'log'))}
+            {@render toolRow('link', t('host.keepTitle'), t('tools.linkRow'), () => (tool = 'link'))}
+            {#if drawn}{@render toolRow('redraw', t('drawn.redraw'), t('tools.redrawRow'), redraw)}{/if}
+            {@render toolRow('delete', t('tools.deleteTitle'), t('tools.deleteRow', { date: dayOf(g.deleteAt) }), remove_group, true)}
+          </div>
         </section>
       </div>
     </div>
@@ -723,61 +803,69 @@
   </form>
 </ewo-sheet>
 
-<!-- Host tools -->
-<ewo-sheet open={tools} label={t('tools.title')} oncancel={() => (tools = false)} onclose={() => (tools = false)}>
-  <span slot="heading" class="disp sheet-h">{t('tools.title')}</span>
+<!-- Host tools: one sheet, opened at the tool picked from the list on the page -->
+<ewo-sheet open={!!tool} label={toolTitle(tool)} oncancel={() => (tool = '')} onclose={() => (tool = '')}>
+  <span slot="heading" class="disp sheet-h">{toolTitle(tool)}</span>
   <div class="form tools">
-    <section class="tool">
-      <h4>{t('tools.unsealTitle')}</h4>
-      {#if inside}
-        <p>{t('tools.unsealedLine', { time: clock(tokenUntil || inside.until) })}</p>
-        <ewo-button variant="primary" onclick={() => seal()}>{t('tools.seal')}</ewo-button>
-      {:else}
-        <p class="hint">{t('tools.unsealBody')}</p>
-        <form class="row" onsubmit={unseal}>
-          <ewo-field label={t('tools.code')} value={code} autocomplete="off" required oninput={(e) => (code = e.currentTarget.value)}></ewo-field>
-          <ewo-button bind:this={unsealButton} type="submit" variant="primary" disabled={!code.trim()}>{t('tools.unseal')}</ewo-button>
-        </form>
-      {/if}
-    </section>
+    {#if tool === 'unseal'}
+      <section class="tool">
+        {#if inside}
+          <p>{t('tools.unsealedLine', { time: clock(tokenUntil || inside.until) })}</p>
+          <ewo-button variant="primary" onclick={() => seal()}>{t('tools.seal')}</ewo-button>
+        {:else}
+          <p class="hint">{t('tools.unsealBody')}</p>
+          <form class="row" onsubmit={unseal}>
+            <ewo-field label={t('tools.code')} value={code} autocomplete="off" required oninput={(e) => (code = e.currentTarget.value)}></ewo-field>
+            <ewo-button bind:this={unsealButton} type="submit" variant="primary" disabled={!code.trim()}>{t('tools.unseal')}</ewo-button>
+          </form>
+        {/if}
+      </section>
+    {:else if tool === 'log'}
+      <section class="tool">
+        <p class="hint">{t('tools.logBody')}</p>
+        <ol class="log">
+          {#each [...view?.log ?? []].reverse() as l, i (i)}
+            <li><span class="when">{stamp(l.at)}</span><span>{logLine(l)}</span></li>
+          {/each}
+        </ol>
+      </section>
+    {:else if tool === 'link'}
+      <section class="tool">
+        <p class="hint">{t('host.keep')}</p>
+        <div class="linkrow"><code>{linkTo('h', key)}</code><ewo-button size="sm" onclick={() => copy(linkTo('h', key), t('copy.done'))}>{t('copy.link')}</ewo-button></div>
+      </section>
 
-    <section class="tool">
-      <h4>{t('tools.logTitle')}</h4>
-      <p class="hint">{t('tools.logBody')}</p>
-      <ol class="log">
-        {#each [...view?.log ?? []].reverse() as l, i (i)}
-          <li><span class="when">{stamp(l.at)}</span><span>{logLine(l)}</span></li>
-        {/each}
-      </ol>
-    </section>
+      <section class="tool">
+        <h4>{t('tools.codeTitle')}</h4>
+        {#if codeOpen}
+          <form class="form" onsubmit={changeCode}>
+            <ewo-field label={t('tools.oldCode')} value={oldCode} autocomplete="off" required oninput={(e) => (oldCode = e.currentTarget.value)}></ewo-field>
+            <ewo-field label={t('tools.newCode')} value={nextCode} autocomplete="off" maxlength="64" required hint={t('new.codeHint')} oninput={(e) => (nextCode = e.currentTarget.value)}></ewo-field>
+            <ewo-button bind:this={codeButton} type="submit" variant="primary">{t('tools.changeCode')}</ewo-button>
+          </form>
+        {:else}
+          <p class="hint">{t('tools.codeBody')}</p>
+          <ewo-button onclick={() => (codeOpen = true)}>{t('tools.changeCode')}</ewo-button>
+        {/if}
+      </section>
 
-    <section class="tool">
-      <h4>{t('tools.codeTitle')}</h4>
-      {#if codeOpen}
-        <form class="form" onsubmit={changeCode}>
-          <ewo-field label={t('tools.oldCode')} value={oldCode} autocomplete="off" required oninput={(e) => (oldCode = e.currentTarget.value)}></ewo-field>
-          <ewo-field label={t('tools.newCode')} value={nextCode} autocomplete="off" maxlength="64" required hint={t('new.codeHint')} oninput={(e) => (nextCode = e.currentTarget.value)}></ewo-field>
-          <ewo-button bind:this={codeButton} type="submit" variant="primary">{t('tools.changeCode')}</ewo-button>
-        </form>
-      {:else}
-        <p class="hint">{t('tools.codeBody')}</p>
-        <ewo-button onclick={() => (codeOpen = true)}>{t('tools.changeCode')}</ewo-button>
-      {/if}
-    </section>
-
-    <section class="tool">
-      <h4>{t('tools.rekeyTitle')}</h4>
-      <p class="hint">{t('tools.rekeyHint')}</p>
-      <ewo-button onclick={rekey}>{t('tools.rekey')}</ewo-button>
-    </section>
-
-    <section class="tool">
-      <h4>{t('tools.deleteTitle')}</h4>
-      <p class="hint">{t('tools.deleteHint', { date: g ? dayOf(g.deleteAt) : '' })}</p>
-      <ewo-button variant="danger" onclick={remove_group}>{t('tools.delete')}</ewo-button>
-    </section>
+      <section class="tool">
+        <h4>{t('tools.rekeyTitle')}</h4>
+        <p class="hint">{t('tools.rekeyHint')}</p>
+        <ewo-button onclick={rekey}>{t('tools.rekey')}</ewo-button>
+      </section>
+    {/if}
   </div>
 </ewo-sheet>
+
+{#snippet toolRow(id: keyof typeof ICONS, label: string, sub: string, run: () => void, danger = false)}
+  <button type="button" class="plain trow" class:danger aria-label={label} aria-describedby={`tool-${id}`} onclick={run}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS[id]} /></svg>
+    <b>{label}</b>
+    <span id={`tool-${id}`}>{sub}</span>
+    <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6" /></svg>
+  </button>
+{/snippet}
 
 <!-- Asking first -->
 <ewo-sheet open={!!ask} label={ask?.title ?? ''} oncancel={() => !asking && (ask = null)} onclose={() => !asking && (ask = null)}>
@@ -819,49 +907,30 @@
     flex-wrap: wrap;
   }
 
-  /* The group's name, and the host tools beside it where the host looks first. */
-  .top {
+  /* The Next step card's sentence, and how the draw goes behind "Change". */
+  .body {
+    font-size: 16px;
+    color: var(--m-ink-2);
+    max-width: 62ch;
+  }
+
+  .how {
     display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
+    align-items: center;
     flex-wrap: wrap;
-    gap: 14px 24px;
+    gap: 4px 10px;
+    font-size: 14.5px;
+    color: var(--m-ink-2);
   }
 
-  .intro {
+  .how-set {
     display: grid;
-    gap: 6px;
-    flex: 1 1 420px;
-    min-width: 0;
-  }
-
-  .tools-open svg {
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-  }
-
-  .eye {
-    font-size: 15px;
-    color: var(--m-ink-2);
-    font-weight: 500;
-  }
-
-  h1 {
-    font-size: clamp(36px, 4.4vw, 52px);
-    line-height: 1;
-    overflow-wrap: anywhere;
-  }
-
-  .meta {
-    font-size: 15px;
-    color: var(--m-ink-2);
-  }
-
-  h2 {
-    font-size: 19px;
-    font-weight: 700;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 14px 18px;
+    align-items: start;
+    padding: 14px 16px;
+    border-radius: var(--m-r);
+    background: var(--m-sunk);
   }
 
   h4 {
@@ -871,8 +940,8 @@
 
   .cols {
     display: grid;
-    grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
-    gap: 28px;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+    gap: 24px;
     align-items: start;
   }
 
@@ -967,6 +1036,73 @@
     gap: 6px;
   }
 
+  /* Host tools as rows on the page: what each does, one tap to it. */
+  .trows {
+    display: grid;
+  }
+
+  .trow {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) 16px;
+    column-gap: 12px;
+    align-items: center;
+    padding: 10px 4px;
+    border-top: 1px solid var(--m-line);
+  }
+
+  .trow:first-child {
+    border-top: 0;
+    padding-top: 4px;
+  }
+
+  .trow svg {
+    grid-row: 1 / span 2;
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: var(--m-ink-2);
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .trow .chev {
+    grid-column: 3;
+    width: 16px;
+    height: 16px;
+    stroke: var(--m-ink-3);
+  }
+
+  .trow b {
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .trow span {
+    grid-column: 2;
+    font-size: 13px;
+    line-height: 1.35;
+    color: var(--m-ink-3);
+  }
+
+  .trow.danger b,
+  .trow.danger svg:not(.chev) {
+    color: var(--m-accent);
+    stroke: var(--m-accent);
+  }
+
+  @media (hover: hover) {
+    .trow:hover b {
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+  }
+
+  .trow:focus-visible {
+    outline: var(--ewo-focus);
+    outline-offset: 2px;
+  }
+
   .sure {
     display: grid;
     gap: 10px;
@@ -1058,7 +1194,7 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* One column: the draw comes right after the village, before the list of everyone. */
+  /* One column: the next step, the village, the short cards and the tools, then the list of everyone. */
   @media (max-width: 959px) {
     .cols {
       display: flex;
@@ -1070,12 +1206,8 @@
     .right {
       display: contents;
     }
-    .o-draw {
+    .o-people {
       order: 1;
-    }
-    .o-people,
-    .right > :not(.o-draw) {
-      order: 2;
     }
   }
 
@@ -1089,7 +1221,8 @@
     .add-acts {
       padding-top: 0;
     }
-    .two {
+    .two,
+    .how-set {
       grid-template-columns: minmax(0, 1fr);
     }
     .chip {
