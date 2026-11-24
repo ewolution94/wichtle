@@ -10,10 +10,7 @@
 @import '../vendor/ewo/tokens/index.css';
 @import '../vendor/ewo/tokens/base.css';
 @import '@fontsource-variable/grenze-gotisch/wght.css';
-@import '@fontsource/alegreya-sans/400.css';
-@import '@fontsource/alegreya-sans/500.css';
-@import '@fontsource/alegreya-sans/700.css';
-@import '@fontsource/alegreya-sans/400-italic.css';
+@import './fonts.css';
 
 :root {
   color-scheme: light dark;
